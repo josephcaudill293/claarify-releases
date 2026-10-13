@@ -1,0 +1,66 @@
+name: Refresh permanent download links
+on:
+  release:
+    types: [published, edited]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: permanent-downloads
+  cancel-in-progress: false
+jobs:
+  refresh:
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'macos-v') || startsWith(github.event.release.tag_name, 'windows-v')
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Select and verify latest stable installers
+        run: |
+          mkdir -p downloads
+          python3 - <<'PY'
+          import hashlib, json, os, re, urllib.request
+          from pathlib import Path
+          repo = os.environ['GITHUB_REPOSITORY']
+          releases = []
+          for page in range(1, 11):
+              request = urllib.request.Request(f'https://api.github.com/repos/{repo}/releases?per_page=100&page={page}', headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json'})
+              batch = json.load(urllib.request.urlopen(request))
+              releases.extend(batch)
+              if len(batch) < 100:
+                  break
+          else:
+              raise RuntimeError('Release pagination limit reached')
+          notes = ['Permanent download links for the latest stable Mac and Windows releases.', '', 'These assets refresh automatically when a platform release is published or edited.', '']
+          for platform, alias in [('macos', 'Claarify-macOS.zip'), ('windows', 'Claarify-Windows-Setup.exe')]:
+              candidates = []
+              for release in releases:
+                  match = re.fullmatch(platform + r'-v(\d+)\.(\d+)\.(\d+)', release['tag_name'])
+                  if match and not release['draft'] and not release['prerelease']:
+                      candidates.append((tuple(map(int, match.groups())), release))
+              if not candidates:
+                  raise RuntimeError(f'No stable {platform} release found')
+              version, release = max(candidates, key=lambda item: item[0])
+              assets = [asset for asset in release['assets'] if (re.fullmatch(r'Claarify-macOS(?:-[0-9.]+)?\.zip', asset['name']) if platform == 'macos' else asset['name'] == alias)]
+              if len(assets) != 1:
+                  raise RuntimeError(f'Expected exactly one installer in {release["tag_name"]}')
+              asset = assets[0]
+              expected = asset.get('digest', '')
+              if not expected.startswith('sha256:'):
+                  raise RuntimeError('Missing SHA256 asset digest')
+              data = urllib.request.urlopen(asset['browser_download_url']).read()
+              if len(data) != asset['size'] or hashlib.sha256(data).hexdigest() != expected[7:]:
+                  raise RuntimeError('Download integrity verification failed')
+              Path('downloads', alias).write_bytes(data)
+              notes.append(f'- {platform}: [{release["tag_name"]}]({release["html_url"]})')
+          notes.extend(['', 'Mac: extract the ZIP and drag Claarify.app into Applications. Requires macOS 14+. The current Mac build is locally signed and not Apple-notarized.', 'Windows: run the setup installer.'])
+          Path('downloads/notes.md').write_text('\n'.join(notes) + '\n')
+          PY
+      - name: Publish permanent assets
+        run: |
+          if gh release view downloads --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release edit downloads --repo "$GITHUB_REPOSITORY" --title 'Claarify — current downloads' --notes-file downloads/notes.md --prerelease --latest=false
+          else
+            gh release create downloads --repo "$GITHUB_REPOSITORY" --title 'Claarify — current downloads' --notes-file downloads/notes.md --prerelease --latest=false
+          fi
+          gh release upload downloads downloads/Claarify-macOS.zip downloads/Claarify-Windows-Setup.exe --repo "$GITHUB_REPOSITORY" --clobber
