@@ -21,7 +21,8 @@ jobs:
           $ErrorActionPreference = 'Stop'
           if ($env:SOURCE_TAG -notmatch '^windows-v[0-9]+\.[0-9]+\.[0-9]+$') { throw 'Invalid Windows tag' }
           for ($attempt=0; $attempt -lt 90; $attempt++) {
-            gh release download $env:SOURCE_TAG --repo $env:GITHUB_REPOSITORY --pattern Claarify-Windows-x64.zip --dir package --clobber
+            $downloadTag = if ($env:SOURCE_TAG -eq 'windows-v0.1.2') { 'untagged-be4412538a039c6bfd06' } else { $env:SOURCE_TAG }
+            gh release download $downloadTag --repo $env:GITHUB_REPOSITORY --pattern Claarify-Windows-x64.zip --dir package --clobber
             if ($LASTEXITCODE -eq 0) { break }
             Start-Sleep -Seconds 10
           }
