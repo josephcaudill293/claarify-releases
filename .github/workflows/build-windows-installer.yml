@@ -70,6 +70,29 @@ jobs:
           "@ | Set-Content package/Claarify.iss -Encoding utf8
           & C:/ClaarifyInno/ISCC.exe package/Claarify.iss
           if ($LASTEXITCODE -ne 0) { throw 'Installer compilation failed' }
+      - name: Verify upgrade from published Windows 0.1.1
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          gh release download windows-v0.1.1 --repo $env:GITHUB_REPOSITORY --pattern Claarify-Windows-Setup.exe --dir previous
+          if ($LASTEXITCODE -ne 0) { throw 'Previous installer unavailable' }
+          $dest = Join-Path $env:RUNNER_TEMP Claarify-Upgrade-Test
+          $old = Start-Process (Resolve-Path previous/Claarify-Windows-Setup.exe) -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=$dest" -Wait -PassThru
+          if ($old.ExitCode -ne 0) { throw 'Previous version installation failed' }
+          $data = Join-Path $env:LOCALAPPDATA Claarify
+          New-Item $data -ItemType Directory -Force | Out-Null
+          Set-Content "$data/upgrade-retention-test.txt" 'preserve existing workspace data'
+          $upgraded = Start-Process (Resolve-Path package/output/Claarify-Windows-Setup.exe) -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=$dest" -Wait -PassThru
+          if ($upgraded.ExitCode -ne 0) { throw 'Upgrade installation failed' }
+          if ((Get-FileHash "$dest/Claarify.dll").Hash -ne (Get-FileHash package/app/Claarify-Windows/Claarify.dll).Hash) { throw 'Upgrade application payload mismatch' }
+          if ((Get-Content "$data/upgrade-retention-test.txt") -ne 'preserve existing workspace data') { throw 'Upgrade lost saved data' }
+          $launched = Start-Process "$dest/Claarify.exe" -PassThru
+          Start-Sleep -Seconds 8
+          if ($launched.HasExited) { throw "Upgraded app startup failed: $($launched.ExitCode)" }
+          $null = $launched.CloseMainWindow()
+          if (-not $launched.WaitForExit(10000)) { Stop-Process -Id $launched.Id -Force }
+          $removed = Start-Process "$dest/unins000.exe" -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -Wait -PassThru
+          if ($removed.ExitCode -ne 0) { throw 'Upgraded app uninstall failed' }
       - name: Verify install, retained data and uninstall
         shell: pwsh
         run: |
