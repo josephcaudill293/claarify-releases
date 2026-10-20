@@ -74,11 +74,11 @@ jobs:
           "@ | Set-Content package/Claarify.iss -Encoding utf8
           & C:/ClaarifyInno/ISCC.exe package/Claarify.iss
           if ($LASTEXITCODE -ne 0) { throw 'Installer compilation failed' }
-      - name: Verify upgrade from published Windows 0.1.1
+      - name: Verify upgrade from published Windows 0.1.2
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          gh release download windows-v0.1.1 --repo $env:GITHUB_REPOSITORY --pattern Claarify-Windows-Setup.exe --dir previous
+          gh release download windows-v0.1.2 --repo $env:GITHUB_REPOSITORY --pattern Claarify-Windows-Setup.exe --dir previous
           if ($LASTEXITCODE -ne 0) { throw 'Previous installer unavailable' }
           $dest = Join-Path $env:RUNNER_TEMP Claarify-Upgrade-Test
           $old = Start-Process (Resolve-Path previous/Claarify-Windows-Setup.exe) -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=$dest" -Wait -PassThru
