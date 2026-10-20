@@ -10,7 +10,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   refresh:
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'macos-v') || startsWith(github.event.release.tag_name, 'windows-v')
+    if: github.event_name == 'workflow_dispatch' || (!github.event.release.prerelease && (startsWith(github.event.release.tag_name, 'macos-v') || startsWith(github.event.release.tag_name, 'windows-v')))
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
@@ -42,6 +42,8 @@ jobs:
                   raise RuntimeError(f'No stable {platform} release found')
               version, release = max(candidates, key=lambda item: item[0])
               assets = [asset for asset in release['assets'] if (re.fullmatch(r'Claarify-macOS(?:-[0-9.]+)?\.zip', asset['name']) if alias.endswith('.zip') else asset['name'] == alias)]
+              if not assets and alias.endswith('.dmg'):
+                  continue  # Older stable Mac releases provided a ZIP only.
               if len(assets) != 1:
                   raise RuntimeError(f'Expected exactly one installer in {release["tag_name"]}')
               asset = assets[0]
@@ -63,4 +65,6 @@ jobs:
           else
             gh release create downloads --repo "$GITHUB_REPOSITORY" --title 'Claarify — current downloads' --notes-file downloads/notes.md --prerelease --latest=false
           fi
-          gh release upload downloads downloads/Claarify-macOS.zip downloads/Claarify-macOS.dmg downloads/Claarify-Windows-Setup.exe --repo "$GITHUB_REPOSITORY" --clobber
+          assets=(downloads/Claarify-macOS.zip downloads/Claarify-Windows-Setup.exe)
+          if [[ -f downloads/Claarify-macOS.dmg ]]; then assets+=(downloads/Claarify-macOS.dmg); fi
+          gh release upload downloads "${assets[@]}" --repo "$GITHUB_REPOSITORY" --clobber
