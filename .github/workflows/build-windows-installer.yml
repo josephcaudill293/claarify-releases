@@ -20,7 +20,11 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           if ($env:SOURCE_TAG -notmatch '^windows-v[0-9]+\.[0-9]+\.[0-9]+$') { throw 'Invalid Windows tag' }
-          gh release download $env:SOURCE_TAG --repo $env:GITHUB_REPOSITORY --pattern Claarify-Windows-x64.zip --dir package
+          for ($attempt=0; $attempt -lt 90; $attempt++) {
+            gh release download $env:SOURCE_TAG --repo $env:GITHUB_REPOSITORY --pattern Claarify-Windows-x64.zip --dir package --clobber
+            if ($LASTEXITCODE -eq 0) { break }
+            Start-Sleep -Seconds 10
+          }
           if ($LASTEXITCODE -ne 0) { throw 'Compiled release ZIP unavailable' }
           Expand-Archive package/Claarify-Windows-x64.zip package/app
           Invoke-WebRequest 'https://github.com/jrsoftware/issrc/releases/download/is-6_7_3/innosetup-6.7.3.exe' -OutFile package/inno.exe
