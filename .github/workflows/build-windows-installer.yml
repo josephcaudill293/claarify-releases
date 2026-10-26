@@ -5,7 +5,7 @@ on:
       release_tag:
         description: Windows release containing the compiled ZIP
         required: true
-        default: windows-v0.1.0
+        default: windows-v0.1.4
 permissions:
   contents: read
 jobs:
@@ -56,6 +56,7 @@ jobs:
           WizardStyle=modern
           CloseApplications=yes
           RestartApplications=no
+          ChangesAssociations=yes
           MinVersion=10.0
           [Languages]
           Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -64,21 +65,28 @@ jobs:
           Name: "german"; MessagesFile: "compiler:Languages\German.isl"
           [Tasks]
           Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; Flags: unchecked
+          [Dirs]
+          Name: "{userdocs}\Claarify\Workspaces"; Flags: uninsneveruninstall
           [Files]
           Source: "app\Claarify-Windows\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
           [Icons]
           Name: "{group}\Claarify"; Filename: "{app}\Claarify.exe"
           Name: "{autodesktop}\Claarify"; Filename: "{app}\Claarify.exe"; Tasks: desktopicon
+          [Registry]
+          Root: HKCU; Subkey: "Software\Classes\.claarify\OpenWithProgids"; ValueType: string; ValueName: "Claarify.Workspace"; ValueData: ""; Flags: uninsdeletevalue
+          Root: HKCU; Subkey: "Software\Classes\Claarify.Workspace"; ValueType: string; ValueData: "Claarify Workspace"; Flags: uninsdeletekey
+          Root: HKCU; Subkey: "Software\Classes\Claarify.Workspace\DefaultIcon"; ValueType: string; ValueData: "{app}\Claarify.exe,0"
+          Root: HKCU; Subkey: "Software\Classes\Claarify.Workspace\shell\open\command"; ValueType: string; ValueData: """{app}\Claarify.exe"" ""%1"""
           [Run]
           Filename: "{app}\Claarify.exe"; Description: "{cm:LaunchProgram,Claarify}"; Flags: nowait postinstall skipifsilent
           "@ | Set-Content package/Claarify.iss -Encoding utf8
           & C:/ClaarifyInno/ISCC.exe package/Claarify.iss
           if ($LASTEXITCODE -ne 0) { throw 'Installer compilation failed' }
-      - name: Verify upgrade from published Windows 0.1.2
+      - name: Verify upgrade from published Windows 0.1.3
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          gh release download windows-v0.1.2 --repo $env:GITHUB_REPOSITORY --pattern Claarify-Windows-Setup.exe --dir previous
+          gh release download windows-v0.1.3 --repo $env:GITHUB_REPOSITORY --pattern Claarify-Windows-Setup.exe --dir previous
           if ($LASTEXITCODE -ne 0) { throw 'Previous installer unavailable' }
           $dest = Join-Path $env:RUNNER_TEMP Claarify-Upgrade-Test
           $old = Start-Process (Resolve-Path previous/Claarify-Windows-Setup.exe) -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=$dest" -Wait -PassThru
@@ -105,6 +113,8 @@ jobs:
           $dest = Join-Path $env:RUNNER_TEMP Claarify-Install-Test
           $installed = Start-Process $installer -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=$dest" -Wait -PassThru
           if ($installed.ExitCode -ne 0 -or -not (Test-Path "$dest/Claarify.exe")) { throw 'Installer test failed' }
+          $workspaceFolder = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'Claarify/Workspaces'
+          if (-not (Test-Path $workspaceFolder)) { throw 'Installer did not create the workspace folder' }
           $expected = (Get-FileHash package/app/Claarify-Windows/Claarify.exe).Hash
           if ((Get-FileHash "$dest/Claarify.exe").Hash -ne $expected) { throw 'Installed executable mismatch' }
           $launched = Start-Process "$dest/Claarify.exe" -PassThru
