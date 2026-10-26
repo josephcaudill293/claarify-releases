@@ -6,6 +6,10 @@ on:
         description: Windows release containing the compiled ZIP
         required: true
         default: windows-v0.1.4
+      source_draft:
+        description: Optional draft tag containing the compiled ZIP
+        required: false
+        default: ''
 permissions:
   contents: read
 jobs:
@@ -14,6 +18,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       SOURCE_TAG: ${{ inputs.release_tag }}
+      SOURCE_DOWNLOAD_TAG: ${{ inputs.source_draft || inputs.release_tag }}
     steps:
       - name: Download compiled app and verified installer compiler
         shell: pwsh
@@ -21,7 +26,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           if ($env:SOURCE_TAG -notmatch '^windows-v[0-9]+\.[0-9]+\.[0-9]+$') { throw 'Invalid Windows tag' }
           for ($attempt=0; $attempt -lt 90; $attempt++) {
-            gh release download $env:SOURCE_TAG --repo $env:GITHUB_REPOSITORY --pattern Claarify-Windows-x64.zip --dir package --clobber
+            gh release download $env:SOURCE_DOWNLOAD_TAG --repo $env:GITHUB_REPOSITORY --pattern Claarify-Windows-x64.zip --dir package --clobber
             if ($LASTEXITCODE -eq 0) { break }
             Start-Sleep -Seconds 10
           }
