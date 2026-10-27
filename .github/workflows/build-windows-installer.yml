@@ -31,6 +31,7 @@ jobs:
             Start-Sleep -Seconds 10
           }
           if ($LASTEXITCODE -ne 0) { throw 'Compiled release ZIP unavailable' }
+          if ((Get-FileHash package/Claarify-Windows-x64.zip -Algorithm SHA256).Hash -ne '95F83F6418921F7A4C9B29D66908A5484D50785888D8077BE66BD75F1F6AE6E1') { throw 'Final app ZIP checksum mismatch' }
           Expand-Archive package/Claarify-Windows-x64.zip package/app
           Invoke-WebRequest 'https://github.com/jrsoftware/issrc/releases/download/is-6_7_3/innosetup-6.7.3.exe' -OutFile package/inno.exe
           if ((Get-FileHash package/inno.exe -Algorithm SHA256).Hash -ne '9C73C3BAE7ED48D44112A0F48E66742C00090BDB5BEF71D9D3C056C66E97B732') { throw 'Compiler checksum mismatch' }
