@@ -5,7 +5,7 @@ on:
       release_tag:
         description: Windows release containing the compiled ZIP
         required: true
-        default: windows-v0.1.4
+        default: windows-v0.1.5
       source_draft:
         description: Optional draft tag containing the compiled ZIP
         required: false
@@ -26,12 +26,12 @@ jobs:
           $ErrorActionPreference = 'Stop'
           if ($env:SOURCE_TAG -notmatch '^windows-v[0-9]+\.[0-9]+\.[0-9]+$') { throw 'Invalid Windows tag' }
           for ($attempt=0; $attempt -lt 3; $attempt++) {
-            gh release download $env:SOURCE_TAG --repo $env:GITHUB_REPOSITORY --pattern Claarify-Windows-x64.zip --dir package --clobber
+            gh release download $env:SOURCE_DOWNLOAD_TAG --repo $env:GITHUB_REPOSITORY --pattern Claarify-Windows-x64.zip --dir package --clobber
             if ($LASTEXITCODE -eq 0) { break }
             Start-Sleep -Seconds 10
           }
           if ($LASTEXITCODE -ne 0) { throw 'Compiled release ZIP unavailable' }
-          if ((Get-FileHash package/Claarify-Windows-x64.zip -Algorithm SHA256).Hash -ne '95F83F6418921F7A4C9B29D66908A5484D50785888D8077BE66BD75F1F6AE6E1') { throw 'Final app ZIP checksum mismatch' }
+          if ((Get-FileHash package/Claarify-Windows-x64.zip -Algorithm SHA256).Hash -ne '2B1FB6D12C573B7E08A6C338B45C8790B16DBD13472B8E131EB2D38EB2A0FE71') { throw 'Final app ZIP checksum mismatch' }
           Expand-Archive package/Claarify-Windows-x64.zip package/app
           Invoke-WebRequest 'https://github.com/jrsoftware/issrc/releases/download/is-6_7_3/innosetup-6.7.3.exe' -OutFile package/inno.exe
           if ((Get-FileHash package/inno.exe -Algorithm SHA256).Hash -ne '9C73C3BAE7ED48D44112A0F48E66742C00090BDB5BEF71D9D3C056C66E97B732') { throw 'Compiler checksum mismatch' }
@@ -88,11 +88,11 @@ jobs:
           "@ | Set-Content package/Claarify.iss -Encoding utf8
           & C:/ClaarifyInno/ISCC.exe package/Claarify.iss
           if ($LASTEXITCODE -ne 0) { throw 'Installer compilation failed' }
-      - name: Verify upgrade from published Windows 0.1.3
+      - name: Verify upgrade from published Windows 0.1.4
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          gh release download windows-v0.1.3 --repo $env:GITHUB_REPOSITORY --pattern Claarify-Windows-Setup.exe --dir previous
+          gh release download windows-v0.1.4 --repo $env:GITHUB_REPOSITORY --pattern Claarify-Windows-Setup.exe --dir previous
           if ($LASTEXITCODE -ne 0) { throw 'Previous installer unavailable' }
           $dest = Join-Path $env:RUNNER_TEMP Claarify-Upgrade-Test
           $old = Start-Process (Resolve-Path previous/Claarify-Windows-Setup.exe) -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=$dest" -Wait -PassThru
