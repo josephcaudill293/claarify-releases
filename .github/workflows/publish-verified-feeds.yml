@@ -1,4 +1,4 @@
-name: Publish verified 0.1.4 update feeds
+name: Publish verified 0.1.5 update feeds
 on:
   workflow_dispatch:
 permissions:
@@ -14,8 +14,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir mac windows
-          gh release download macos-v0.1.4 --repo "$GITHUB_REPOSITORY" --pattern Claarify-macOS.dmg --pattern appcast-macos.xml --dir mac
-          gh release download windows-v0.1.4 --repo "$GITHUB_REPOSITORY" --pattern Claarify-Windows-Setup.exe --pattern appcast-windows.xml --dir windows
+          gh release download macos-v0.1.5 --repo "$GITHUB_REPOSITORY" --pattern Claarify-macOS.dmg --pattern appcast-macos.xml --dir mac
+          gh release download windows-v0.1.5 --repo "$GITHUB_REPOSITORY" --pattern Claarify-Windows-Setup.exe --pattern appcast-windows.xml --dir windows
           python3 - <<'PY'
           import base64, pathlib, re, subprocess, xml.etree.ElementTree as ET
           public=base64.b64decode('SfX05t0Mmy64TTd2k9hXot/GwhFS0RmJC5YHqbBkDjI=')
@@ -32,8 +32,8 @@ jobs:
               assert len(items)==1
               item=items[0]; enclosure=item.find('enclosure'); data=pathlib.Path(platform,filename).read_bytes()
               version=item.findtext('s:version',namespaces=ns) if platform=='mac' else enclosure.get('{'+ns['s']+'}version')
-              assert version==('5' if platform=='mac' else '0.1.4')
-              tag=('macos' if platform=='mac' else 'windows')+'-v0.1.4'
+              assert version==('6' if platform=='mac' else '0.1.5')
+              tag=('macos' if platform=='mac' else 'windows')+'-v0.1.5'
               assert enclosure.get('url')=='https://github.com/'+__import__('os').environ['GITHUB_REPOSITORY']+'/releases/download/'+tag+'/'+filename
               assert int(enclosure.get('length'))==len(data)
               verify(data,enclosure.get('{'+ns['s']+'}edSignature'),filename)
