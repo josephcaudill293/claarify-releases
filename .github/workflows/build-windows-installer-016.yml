@@ -1,0 +1,143 @@
+name: Build Windows installer
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Windows release containing the compiled ZIP
+        required: true
+        default: windows-v0.1.6
+      source_draft:
+        description: Optional draft tag containing the compiled ZIP
+        required: false
+        default: ''
+permissions:
+  contents: read
+jobs:
+  installer:
+    runs-on: windows-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_TAG: ${{ inputs.release_tag }}
+      SOURCE_DOWNLOAD_TAG: ${{ inputs.source_draft || inputs.release_tag }}
+    steps:
+      - name: Download compiled app and verified installer compiler
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:SOURCE_TAG -notmatch '^windows-v[0-9]+\.[0-9]+\.[0-9]+$') { throw 'Invalid Windows tag' }
+          for ($attempt=0; $attempt -lt 3; $attempt++) {
+            gh release download $env:SOURCE_DOWNLOAD_TAG --repo $env:GITHUB_REPOSITORY --pattern Claarify-Windows-x64.zip --dir package --clobber
+            if ($LASTEXITCODE -eq 0) { break }
+            Start-Sleep -Seconds 10
+          }
+          if ($LASTEXITCODE -ne 0) { throw 'Compiled release ZIP unavailable' }
+          if ((Get-FileHash package/Claarify-Windows-x64.zip -Algorithm SHA256).Hash -ne 'A75AB26452F3F5A30384233B13FD924AE75DAA35CB496E6E48DAF34F853AF9E5') { throw 'Final app ZIP checksum mismatch' }
+          Expand-Archive package/Claarify-Windows-x64.zip package/app
+          Invoke-WebRequest 'https://github.com/jrsoftware/issrc/releases/download/is-6_7_3/innosetup-6.7.3.exe' -OutFile package/inno.exe
+          if ((Get-FileHash package/inno.exe -Algorithm SHA256).Hash -ne '9C73C3BAE7ED48D44112A0F48E66742C00090BDB5BEF71D9D3C056C66E97B732') { throw 'Compiler checksum mismatch' }
+          $install = Start-Process package/inno.exe -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/SP-','/DIR=C:\ClaarifyInno' -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw 'Compiler installation failed' }
+      - name: Build per-user Windows installer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = $env:SOURCE_TAG.Substring(9)
+          @"
+          [Setup]
+          AppId={{B33F3E19-28D7-4BB5-9EC8-AF7B3E96A160}
+          AppName=Claarify
+          AppVersion=$version
+          AppPublisher=Joseph Caudill
+          DefaultDirName={localappdata}\Programs\Claarify
+          DefaultGroupName=Claarify
+          PrivilegesRequired=lowest
+          ArchitecturesAllowed=x64compatible
+          ArchitecturesInstallIn64BitMode=x64compatible
+          OutputDir=output
+          OutputBaseFilename=Claarify-Windows-Setup
+          SetupIconFile=app\Claarify-Windows\Claarify.ico
+          UninstallDisplayIcon={app}\Claarify.exe
+          Compression=lzma2
+          SolidCompression=yes
+          WizardStyle=modern
+          CloseApplications=yes
+          RestartApplications=no
+          ChangesAssociations=yes
+          MinVersion=10.0
+          [Languages]
+          Name: "english"; MessagesFile: "compiler:Default.isl"
+          Name: "spanish"; MessagesFile: "compiler:Languages\Spanish.isl"
+          Name: "french"; MessagesFile: "compiler:Languages\French.isl"
+          Name: "german"; MessagesFile: "compiler:Languages\German.isl"
+          [Tasks]
+          Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; Flags: unchecked
+          [Dirs]
+          Name: "{userdocs}\Claarify\Workspaces"; Flags: uninsneveruninstall
+          [Files]
+          Source: "app\Claarify-Windows\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+          [Icons]
+          Name: "{group}\Claarify"; Filename: "{app}\Claarify.exe"
+          Name: "{autodesktop}\Claarify"; Filename: "{app}\Claarify.exe"; Tasks: desktopicon
+          [Registry]
+          Root: HKCU; Subkey: "Software\Classes\.claarify\OpenWithProgids"; ValueType: string; ValueName: "Claarify.Workspace"; ValueData: ""; Flags: uninsdeletevalue
+          Root: HKCU; Subkey: "Software\Classes\Claarify.Workspace"; ValueType: string; ValueData: "Claarify Workspace"; Flags: uninsdeletekey
+          Root: HKCU; Subkey: "Software\Classes\Claarify.Workspace\DefaultIcon"; ValueType: string; ValueData: "{app}\Claarify.exe,0"
+          Root: HKCU; Subkey: "Software\Classes\Claarify.Workspace\shell\open\command"; ValueType: string; ValueData: """{app}\Claarify.exe"" ""%1"""
+          [Run]
+          Filename: "{app}\Claarify.exe"; Description: "{cm:LaunchProgram,Claarify}"; Flags: nowait postinstall skipifsilent
+          "@ | Set-Content package/Claarify.iss -Encoding utf8
+          & C:/ClaarifyInno/ISCC.exe package/Claarify.iss
+          if ($LASTEXITCODE -ne 0) { throw 'Installer compilation failed' }
+      - name: Verify upgrade from published Windows 0.1.5
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          gh release download windows-v0.1.5 --repo $env:GITHUB_REPOSITORY --pattern Claarify-Windows-Setup.exe --dir previous
+          if ($LASTEXITCODE -ne 0) { throw 'Previous installer unavailable' }
+          $dest = Join-Path $env:RUNNER_TEMP Claarify-Upgrade-Test
+          $old = Start-Process (Resolve-Path previous/Claarify-Windows-Setup.exe) -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=$dest" -Wait -PassThru
+          if ($old.ExitCode -ne 0) { throw 'Previous version installation failed' }
+          $data = Join-Path $env:LOCALAPPDATA Claarify
+          New-Item $data -ItemType Directory -Force | Out-Null
+          Set-Content "$data/upgrade-retention-test.txt" 'preserve existing workspace data'
+          $upgraded = Start-Process (Resolve-Path package/output/Claarify-Windows-Setup.exe) -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=$dest" -Wait -PassThru
+          if ($upgraded.ExitCode -ne 0) { throw 'Upgrade installation failed' }
+          if ((Get-FileHash "$dest/Claarify.dll").Hash -ne (Get-FileHash package/app/Claarify-Windows/Claarify.dll).Hash) { throw 'Upgrade application payload mismatch' }
+          if ((Get-Content "$data/upgrade-retention-test.txt") -ne 'preserve existing workspace data') { throw 'Upgrade lost saved data' }
+          $launched = Start-Process "$dest/Claarify.exe" -PassThru
+          Start-Sleep -Seconds 8
+          if ($launched.HasExited) { throw "Upgraded app startup failed: $($launched.ExitCode)" }
+          $null = $launched.CloseMainWindow()
+          if (-not $launched.WaitForExit(10000)) { Stop-Process -Id $launched.Id -Force }
+          $removed = Start-Process "$dest/unins000.exe" -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -Wait -PassThru
+          if ($removed.ExitCode -ne 0) { throw 'Upgraded app uninstall failed' }
+      - name: Verify install, retained data and uninstall
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $installer = Resolve-Path package/output/Claarify-Windows-Setup.exe
+          $dest = Join-Path $env:RUNNER_TEMP Claarify-Install-Test
+          $installed = Start-Process $installer -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=$dest" -Wait -PassThru
+          if ($installed.ExitCode -ne 0 -or -not (Test-Path "$dest/Claarify.exe")) { throw 'Installer test failed' }
+          $workspaceFolder = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'Claarify/Workspaces'
+          if (-not (Test-Path $workspaceFolder)) { throw 'Installer did not create the workspace folder' }
+          $expected = (Get-FileHash package/app/Claarify-Windows/Claarify.exe).Hash
+          if ((Get-FileHash "$dest/Claarify.exe").Hash -ne $expected) { throw 'Installed executable mismatch' }
+          $launched = Start-Process "$dest/Claarify.exe" -PassThru
+          Start-Sleep -Seconds 8
+          if ($launched.HasExited) { throw "App startup failed: $($launched.ExitCode)" }
+          $null = $launched.CloseMainWindow()
+          if (-not $launched.WaitForExit(10000)) { Stop-Process -Id $launched.Id -Force }
+          $data = Join-Path $env:LOCALAPPDATA Claarify
+          New-Item $data -ItemType Directory -Force | Out-Null
+          Set-Content "$data/retention-test.txt" 'keep this data'
+          $removed = Start-Process "$dest/unins000.exe" -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -Wait -PassThru
+          if ($removed.ExitCode -ne 0 -or (Test-Path "$dest/Claarify.exe") -or -not (Test-Path "$data/retention-test.txt")) { throw 'Uninstall or retained-data test failed' }
+          Get-FileHash $installer -Algorithm SHA256 | Format-List | Out-File package/output/Installer-SHA256.txt
+      - name: Save installer for release signing
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: Claarify-Windows-Installer
+          path: package/output/*
+          retention-days: 7
+
