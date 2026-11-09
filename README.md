@@ -4,12 +4,16 @@ Official release downloads and update information for Claarify.
 
 ## Availability
 
-- **macOS:** Claarify 0.1.0 is the first regular release, for macOS 14 or later on Apple Silicon and Intel Macs. [Download for Mac](https://github.com/josephcaudill293/claarify-releases/releases/latest/download/Claarify-macOS.dmg).
-- **Windows:** Claarify 0.1.0, for Intel/AMD 64-bit Windows 10 and 11. [Download Windows installer](https://github.com/josephcaudill293/claarify-releases/releases/download/windows-v0.1.0/Claarify-Windows-Setup.exe).
+- **macOS:** Claarify 0.1.6, for macOS 14 or later on Apple Silicon and Intel Macs. [Download for Mac](https://github.com/josephcaudill293/claarify-releases/releases/download/downloads/Claarify-macOS.dmg).
+- **Windows:** Claarify 0.1.6, for Intel/AMD 64-bit Windows 10 and 11. [Download Windows installer](https://github.com/josephcaudill293/claarify-releases/releases/download/downloads/Claarify-Windows-Setup.exe).
+
+## New in 0.1.6
+
+Bass Comfort defaults to Songs only, using your existing service timeline. Every custom goal can evaluate the Entire service, Songs only, Non-song sections, or Selected categories. Section choices apply to scores, reports and trends; missing sections leave goals unrated. Review estimated song boundaries before relying on section-specific scores.
 
 ## Installation
 
-**Mac:** Open Claarify-macOS.dmg. Drag Claarify onto the Applications folder shortcut, open Claarify from Applications, and eject the disk image. The app is locally signed and not Apple-notarized; macOS may require manual approval in System Settings > Privacy & Security.
+**Mac:** Open Claarify-macOS.dmg and use Install Claarify.pkg, or drag Claarify onto the Applications folder shortcut, open Claarify from Applications, and eject the disk image. The app is locally signed and not Apple-notarized; macOS may require manual approval in System Settings > Privacy & Security.
 
 **Windows:** Run Claarify-Windows-Setup.exe. It installs for your Windows account and adds a Start menu shortcut, with an optional desktop shortcut. No developer tools are needed. The app and installer are not Authenticode-signed, so Windows may show an unknown-publisher warning. The ZIP is an optional portable copy: extract the entire folder and open Claarify.exe.
 
